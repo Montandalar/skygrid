@@ -1,0 +1,4 @@
+#   How far apart each block will be. That is, the distance from the front of
+#   one node to the front of the next node, not the distance between the back of
+#   one node and front of another.
+skygrid.grid_length (Grid length) int 4 1 100
