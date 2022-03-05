@@ -53,66 +53,6 @@ end
 skygrid.plants = plants
 indexplants()
 
-local overworld_p = {
-	[minetest.get_content_id("mcl_core:stone")] = 120,
-	[minetest.get_content_id("mcl_core:dirt_with_grass")] = 80,
-	[minetest.get_content_id("mcl_core:dirt")] = 20,
-	-- Disabled for now - liquids can't avoid block updates under MCL2
-	-- [minetest.get_content_id("mcl_core:water_source")] = 10,
-	-- [minetest.get_content_id("mcl_core:lava_source")] = 5,
-	[minetest.get_content_id("mcl_core:sand")] = 20,
-	[minetest.get_content_id("mcl_core:gravel")] = 10,
-	[minetest.get_content_id("mcl_core:stone_with_gold")] = 10,
-	[minetest.get_content_id("mcl_core:stone_with_iron")] = 20,
-	[minetest.get_content_id("mcl_core:stone_with_coal")] = 40,
-	[minetest.get_content_id("mcl_core:tree")] = 100,
-	[minetest.get_content_id("mcl_core:leaves")] = 40,
-	[minetest.get_content_id("mcl_core:glass")] = 1,
-	[minetest.get_content_id("mcl_core:stone_with_lapis")] = 5,
-	[minetest.get_content_id("mcl_core:sandstone")] = 10,
-	[minetest.get_content_id("mesecons_pistons:piston_sticky_off")] = 1,
-	[minetest.get_content_id("mcl_flowers:tallgrass")] = 3,
-	[minetest.get_content_id("mcl_core:deadbush")] = 3,
-	[minetest.get_content_id("mesecons_pistons:piston_normal_off")] = 1,
-	[minetest.get_content_id("mcl_wool:white")] = 25,
-	[minetest.get_content_id("mcl_flowers:dandelion")] = 2,
-	[minetest.get_content_id("mcl_flowers:poppy")] = 2,
-	[minetest.get_content_id("mcl_mushrooms:mushroom_brown")] = 2,
-	[minetest.get_content_id("mcl_mushrooms:mushroom_red")] = 2,
-	[minetest.get_content_id("mcl_tnt:tnt")] = 2,
-	[minetest.get_content_id("mcl_books:bookshelf")] = 3,
-	[minetest.get_content_id("mcl_core:mossycobble")] = 5,
-	[minetest.get_content_id("mcl_core:obsidian")] = 5,
-	[minetest.get_content_id("mcl_mobspawners:spawner")] = 1,
-	[minetest.get_content_id("mcl_chests:chest")] = 1,
-	[minetest.get_content_id("mcl_core:stone_with_diamond")] = 1,
-	[minetest.get_content_id("mcl_core:stone_with_redstone")] = 12,
-	[minetest.get_content_id("mcl_core:ice")] = 4,
-	[minetest.get_content_id("mcl_core:snowblock")] = 8,
-	[minetest.get_content_id("mcl_core:cactus")] = 1,
-	[minetest.get_content_id("mcl_core:clay")] = 20,
-	[minetest.get_content_id("mcl_core:reeds")] = 15,
-	[minetest.get_content_id("mcl_farming:pumpkin_face")] = 5,
-	[minetest.get_content_id("mcl_farming:melon")] = 5,
-	[minetest.get_content_id("mcl_core:mycelium")] = 15,
-}
-skygrid.overworld_p = overworld_p
-
-local nether_p = {
-	--[minetest.get_content_id("mcl_core:lava_source")] = 50,
-	[minetest.get_content_id("mcl_core:gravel")] = 30,
-	[minetest.get_content_id("mcl_mobspawners:spawner")] = 2,
-	[minetest.get_content_id("mcl_chests:chest")] = 1,
-	[minetest.get_content_id("mcl_nether:netherrack")] = 300,
-	[minetest.get_content_id("mcl_nether:soul_sand")] = 100,
-	[minetest.get_content_id("mcl_nether:glowstone")] = 50,
-	[minetest.get_content_id("mcl_nether:nether_brick")] = 30,
-	[minetest.get_content_id("mcl_fences:nether_brick_fence")] = 10,
-	[minetest.get_content_id("mcl_stairs:stair_nether_brick")] = 15,
-	[minetest.get_content_id("mcl_nether:nether_wart_0")] = 30,
-}
-skygrid.nether_p = nether_p
-
 function accumulate_probabilities(p)
 	local total = 0
 	local cump = {}
@@ -124,39 +64,134 @@ function accumulate_probabilities(p)
 	p.total = total
 end
 
-accumulate_probabilities(overworld_p)
-accumulate_probabilities(nether_p)
-
+-- WIP: Detection of end dimension generation
 for orekey, oredef in pairs(minetest.registered_ores) do
 	if oredef.ore == "mcl_end:end_stone" then
-		minetest.log("warning", string.format("endstone = %d", orekey))
+		minetest.log("info", string.format("Found endstone registration= %d", orekey))
 	end
 end
 
-local dimension_register = {}
-for _, dimname in pairs({"overworld", "nether", "end"}) do
-	local dimregistration = {
-		def = skygrid[dimname.."_p"],
-		min = mcl_vars["mg_"..dimname.."_min"],
-	}
-	-- Limit generation to the generation limit not the build limit
-	local max = mcl_vars["mg_"..dimname.."_max_official"]
-		or mcl_vars["mg_"..dimname.."_max"]
-	dimregistration.max = max
+local registered_dimensions = {}
 
-	dimension_register[dimname] = dimregistration
+-- Overridable so mods can redefine a dimension e.g. to provide a post-1.5
+-- experience for overworld (e.g. llama spawners) or nether (e.g. quartz).
+local function register_dimension(name, dimdef)
+	accumulate_probabilities(dimdef.prob)
+	dimdef.spawners.count = #dimdef.spawners
+	registered_dimensions[name] = dimdef
 end
 
-local maxnoise = 0
-local minnoise = 5000
+
+register_dimension("overworld", {
+	min = mcl_vars.mg_overworld_min,
+	max = mcl_vars.mg_overworld_max_official,
+
+	prob = {
+		[minetest.get_content_id("mcl_core:stone")] = 120,
+		[minetest.get_content_id("mcl_core:dirt_with_grass")] = 80,
+		[minetest.get_content_id("mcl_core:dirt")] = 20,
+		-- Disabled for now - liquids can't avoid block updates under MCL2
+		-- [minetest.get_content_id("mcl_core:water_source")] = 10,
+		-- [minetest.get_content_id("mcl_core:lava_source")] = 5,
+		[minetest.get_content_id("mcl_core:sand")] = 20,
+		[minetest.get_content_id("mcl_core:gravel")] = 10,
+		[minetest.get_content_id("mcl_core:stone_with_gold")] = 10,
+		[minetest.get_content_id("mcl_core:stone_with_iron")] = 20,
+		[minetest.get_content_id("mcl_core:stone_with_coal")] = 40,
+		[minetest.get_content_id("mcl_core:tree")] = 100,
+		[minetest.get_content_id("mcl_core:leaves")] = 40,
+		[minetest.get_content_id("mcl_core:glass")] = 1,
+		[minetest.get_content_id("mcl_core:stone_with_lapis")] = 5,
+		[minetest.get_content_id("mcl_core:sandstone")] = 10,
+		[minetest.get_content_id("mesecons_pistons:piston_sticky_off")] = 1,
+		[minetest.get_content_id("mcl_flowers:tallgrass")] = 3,
+		[minetest.get_content_id("mcl_core:deadbush")] = 3,
+		[minetest.get_content_id("mesecons_pistons:piston_normal_off")] = 1,
+		[minetest.get_content_id("mcl_wool:white")] = 25,
+		[minetest.get_content_id("mcl_flowers:dandelion")] = 2,
+		[minetest.get_content_id("mcl_flowers:poppy")] = 2,
+		[minetest.get_content_id("mcl_mushrooms:mushroom_brown")] = 2,
+		[minetest.get_content_id("mcl_mushrooms:mushroom_red")] = 2,
+		[minetest.get_content_id("mcl_tnt:tnt")] = 2,
+		[minetest.get_content_id("mcl_books:bookshelf")] = 3,
+		[minetest.get_content_id("mcl_core:mossycobble")] = 5,
+		[minetest.get_content_id("mcl_core:obsidian")] = 5,
+		[minetest.get_content_id("mcl_mobspawners:spawner")] = 1,
+		[minetest.get_content_id("mcl_chests:chest")] = 1,
+		[minetest.get_content_id("mcl_core:stone_with_diamond")] = 1,
+		[minetest.get_content_id("mcl_core:stone_with_redstone")] = 12,
+		[minetest.get_content_id("mcl_core:ice")] = 4,
+		[minetest.get_content_id("mcl_core:snowblock")] = 8,
+		[minetest.get_content_id("mcl_core:cactus")] = 1,
+		[minetest.get_content_id("mcl_core:clay")] = 20,
+		[minetest.get_content_id("mcl_core:reeds")] = 15,
+		[minetest.get_content_id("mcl_farming:pumpkin_face")] = 5,
+		[minetest.get_content_id("mcl_farming:melon")] = 5,
+		[minetest.get_content_id("mcl_core:mycelium")] = 15,
+	},
+
+	spawners = {
+		"mobs_mc:creeper",
+		"mobs_mc:skeleton",
+		"mobs_mc:spider",
+		"mobs_mc:cave_spider",
+		"mobs_mc:zombie",
+		-- Not sure if slime_big, slime_small or slime_tiny closest to
+		-- original, but let's reward people for finding a spawner that is lucky
+		-- enough to be in a slime chunk.
+		"mobs_mc:slime_big",
+		"mobs_mc:pig",
+		"mobs_mc:sheep",
+		"mobs_mc:cow",
+		"mobs_mc:chicken",
+		"mobs_mc:squid",
+		"mobs_mc:wolf",
+		"mobs_mc:enderman",
+		"mobs_mc:silverfish", --geoff
+		"mobs_mc:villager",
+	}
+})
+
+register_dimension("nether", {
+	min = mcl_vars.mg_nether_min,
+	max = mcl_vars.mg_nether_max,
+
+	prob = {
+		-- Disabled due to uncontrolled flowing
+		--[minetest.get_content_id("mcl_core:lava_source")] = 50,
+		[minetest.get_content_id("mcl_core:gravel")] = 30,
+		[minetest.get_content_id("mcl_mobspawners:spawner")] = 2,
+		[minetest.get_content_id("mcl_chests:chest")] = 1,
+		[minetest.get_content_id("mcl_nether:netherrack")] = 300,
+		[minetest.get_content_id("mcl_nether:soul_sand")] = 100,
+		[minetest.get_content_id("mcl_nether:glowstone")] = 50,
+		[minetest.get_content_id("mcl_nether:nether_brick")] = 30,
+		[minetest.get_content_id("mcl_fences:nether_brick_fence")] = 10,
+		[minetest.get_content_id("mcl_stairs:stair_nether_brick")] = 15,
+		[minetest.get_content_id("mcl_nether:nether_wart_0")] = 30,
+	},
+
+	spawners = {
+		"mobs_mc:pigman",
+		"mobs_mc:blaze",
+		-- Like slime for overworld: be generous.
+		"mobs_mc:magma_cube_big"
+	}
+
+})
+
+register_dimension("end", {
+	min = mcl_vars.mg_end_min,
+	max = mcl_vars.mg_end_max_official,
+
+	prob = {},
+	spawners = {},
+})
+
+skygrid.registered_dimensions = registered_dimensions
 
 local function decide_cid(pos, perlin, dimension)
 	local noise = perlin:get_3d(pos)
-	if noise > maxnoise then
-		maxnoise = noise
-	end if noise < minnoise then
-		minnoise = noise
-	end
 
 	local low local high
 	local cump = dimension.cump
@@ -334,7 +369,8 @@ local function add_loot_to_chest(list, randy, inv, count)
 	inv:set_stack("main", chest_spot, itemstack)
 end
 
--- Analogous to fillChestAt in SethBling plugin
+-- Fill a chest inventory at the given position. TODO: per-dimension loot.
+-- Analogous to fillChestAt in SethBling plugin.
 local function gen_chest_inv_at(pos, perlin)
 	local noise = perlin:get_3d(pos)
 	local randy = PcgRandom(noise, minetest.hash_node_position(pos))
@@ -385,9 +421,18 @@ local function gen_chest_inv_at(pos, perlin)
 	return inv
 end
 
-local function gen_spawner_at(dimension, pos)
+-- Generate a mob spawner in the given dimension at given position. The
+-- dimension must have more than 0 mob spawner definitions and it is the
+-- caller's responsibility to work out the correct dimension for the position.
+local function gen_spawner_at(spawninfo, pos, perlin)
+	local noise = perlin:get_3d(pos)
+	local randy = PcgRandom(noise, minetest.hash_node_position(pos))
+	local mob = spawninfo[randy:next(1,spawninfo.count)]
+
+	mcl_mobspawners.setup_spawner(pos, mob)
 end
 
+-- Main callback: Generate a skygrid in the given area
 local function ongen(minp, maxp, blockseed)
 	local x_min = minp.x
 	local y_min = minp.y
@@ -401,19 +446,21 @@ local function ongen(minp, maxp, blockseed)
 	voxmanip:get_data(vm_data)
 
 	local dimension = nil
-	for dimname, dimdef in pairs(dimension_register) do
+	for dimname, dimdef in pairs(registered_dimensions) do
 		if y_max > dimdef.min and y_min < dimdef.max then
-			dimension = dimdef.def
+			dimension = dimdef
 			break
 		end
 	end
-	-- No applicable dimension
-	if dimension == nil then
-	return end
+
+	-- No applicable dimension, or empty dimension
+	if dimension == nil or dimension.prob.total == 0 then
+		return
+	end
 
 	local np = {
-		offset = dimension.total/2,
-		scale = dimension.total/2,
+		offset = dimension.prob.total/2,
+		scale = dimension.prob.total/2,
 		spread = np_grid.spread,
 		seed = blockseed,
 		octaves = np_grid.octaves,
@@ -436,7 +483,7 @@ local pmapsize = vector.new(
 			for z = z_min, z_max, gridlen do
 				local voxindex = area:index(x,y,z)
 				local pos = vector.new(x,y,z)
-				local cid = decide_cid(pos, perlin, dimension)
+				local cid = decide_cid(pos, perlin, dimension.prob)
 
 				-- Put plants above a dirt node
 				if (plants[cid]) then
@@ -467,14 +514,11 @@ local pmapsize = vector.new(
 				end
 
 				if cid == CONTENT_SPAWNER then
-					gen_spawner_at(dimension, pos)
+					gen_spawner_at(dimension.spawners, pos, perlin)
 				end
 			end
 		end
 	end
-
-	-- TODO: end portal in overworld after range check including
-	-- correct rotation
 
 	voxmanip:set_data(vm_data)
 	voxmanip:set_lighting({day = 0, night = 0})
@@ -484,3 +528,6 @@ local pmapsize = vector.new(
 end
 
 minetest.register_on_generated(ongen)
+
+-- TODO: Make an end portal schematic and place it once in the world, at
+--0,bottom,0_ saving a flag into modstorage to mark it complete.
