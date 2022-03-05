@@ -1,3 +1,5 @@
+maths = dofile(minetest.get_modpath("skygrid").."/maths.lua")
+
 local skygrid = {}
 
 local gridlen = tonumber(minetest.settings:get("skygrid.grid_length"))
@@ -441,10 +443,6 @@ local function ongen(minp, maxp, blockseed)
 	local y_max = maxp.y
 	local z_max = maxp.z
 
-	local voxmanip, coord_min, coord_max = minetest.get_mapgen_object("voxelmanip")
-	local area = VoxelArea:new{MinEdge = coord_min, MaxEdge = coord_max}
-	voxmanip:get_data(vm_data)
-
 	local dimension = nil
 	for dimname, dimdef in pairs(registered_dimensions) do
 		if y_max > dimdef.min and y_min < dimdef.max then
@@ -458,14 +456,13 @@ local function ongen(minp, maxp, blockseed)
 		return
 	end
 
-	local np = {
-		offset = dimension.prob.total/2,
-		scale = dimension.prob.total/2,
-		spread = np_grid.spread,
-		seed = blockseed,
-		octaves = np_grid.octaves,
-		persist = np_grid.persist,
-	}
+	-- This ensures that odd grids lengths like 11 work properly
+	local x_min = maths.mod_align_nearest(x_min, gridlen)
+	local y_min = maths.mod_align_nearest(y_min, gridlen)
+	local z_min = maths.mod_align_nearest(z_min, gridlen)
+	local x_max = maths.mod_align_nearest(x_max, gridlen)
+	local y_max = maths.mod_align_nearest(y_max, gridlen)
+	local z_max = maths.mod_align_nearest(z_max, gridlen)
 
 	--[[ -- Switch to this if bulk update/overwrite gets implemented
 local pmapsize = vector.new(
@@ -473,7 +470,22 @@ local pmapsize = vector.new(
 		(y_max - y_min)+1,
 		(z_max - z_min)+1
 	)--]]
-	local perlin = PerlinNoise(np) --..Map(np, pmapsize)
+	local perlin = PerlinNoise({
+		offset = dimension.prob.total/2,
+		scale = dimension.prob.total/2,
+		spread = np_grid.spread,
+		seed = blockseed,
+		octaves = np_grid.octaves,
+		persist = np_grid.persist,
+	}) --..Map(np, pmapsize)
+
+	local r = x_min % gridlen
+	if r ~= 0 then
+	end
+
+	local voxmanip, coord_min, coord_max = minetest.get_mapgen_object("voxelmanip")
+	local area = VoxelArea:new{ MinEdge = coord_min, MaxEdge = coord_max }
+	voxmanip:get_data(vm_data)
 
 	-- FIXME: non-uniform for size 11 and probably other numbers that aren't
 	-- divisors of 16 (block size) or 48 (chunk size). Should work from a
